@@ -180,12 +180,11 @@ parse_hex_string(exp_t * out, const char ** in, int *len) {
   out->val.bytes.len = 0;
 
   uint8_t cur = 0;
-  uint8_t even = 0;
-  even = even ^ even;
+  uint8_t even = 1;
   for((*in)++, (*len)--;**in && *len; (*in)++, (*len)--) {
     char c = **in;
     cur = cur << 4;
-    even = even ^ even;
+    even = !even;
     
     if(c >= '0' && c <= '9') {
       cur = cur | (c - '0');
