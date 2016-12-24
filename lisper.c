@@ -1,5 +1,6 @@
 #include "lisper.h"
-#include  <stdio.h>
+#include <stdio.h>
+#include <math.h>
 
 const char *
 parse_list(exp_t * out, const char ** in, int *len) {
@@ -210,6 +211,92 @@ parse_hex_string(exp_t * out, const char ** in, int *len) {
 
 const char *
 parse_number(exp_t * out, const char ** in, int *len) {
+  const char * err = NULL;
+
+  out->type = EXP_INT64;
+  out->val.i64 = 0;
+
+  uint8_t is_float = 0;
+  uint8_t past_decimal = 0;
+  uint8_t past_e = 0;
+  uint8_t is_negative = 0;
+  uint8_t is_eng_negative = 0;
+  int64_t num = 0;
+  int64_t eng = 0;
+  int64_t dec = 0;
+  int64_t n = 0;
+  for(;**in && *len; (*in)++, (*len)--) {
+    n++;
+    char c = **in;
+    switch(c) {
+      case '-': {
+        if(n != 1) {
+          return "Negative was not first character in number";
+        }
+        if(past_e) {
+          is_eng_negative = 1;
+        } else {
+          is_negative = 1;
+        }
+      } break;
+      case '0':
+      case '1':
+      case '2':
+      case '3':
+      case '4':
+      case '5':
+      case '6':
+      case '7':
+      case '8':
+      case '9': {
+        if(past_e) {
+          eng *= 10;
+          eng += c - '0';
+        } else if(past_decimal) {
+          dec -= 1;
+          num *= 10;
+          num += c - '0';
+        } else {
+          num *= 10;
+          num += c - '0';
+        }
+      } break;
+      case '.': {
+        if(past_decimal) {
+          return "Multiple decimals in number";
+        }
+        is_float = 1;
+        past_decimal = 1;
+      } break;
+      case 'e':
+      case 'E': {
+        if(past_e) {
+          return "Multiple 'e' or 'E' in number";
+        }
+        past_e = 1;
+        is_float = 1;
+        n = 0;
+      } break;
+      default: {
+        if(is_negative) {
+          num *= -1;
+        }
+        if(!is_float) {
+          out->val.i64 = num;
+          return NULL;
+        }
+        out->type = EXP_FLOAT64;
+        if(is_eng_negative) {
+          eng *= -1;
+        }
+        eng += dec;
+        out->val.f64 = (double)num;
+        out->val.f64 *= pow((double)10.0, (double)eng);
+        return NULL;
+      }
+    }
+  }
+  return NULL;
 }
 
 const char *
@@ -255,7 +342,7 @@ print_exp(exp_t * out, int indent) {
       printf("EXP_INT64   %ld\n", (long)out->val.i64);
       break;
     case EXP_FLOAT64:
-      printf("EXP_FLOAT64 %lf\n", out->val.f64);
+      printf("EXP_FLOAT64 %lg\n", out->val.f64);
       break;
     case EXP_BYTES:
       printf("EXP_BYTES   %.*s\n", (int)out->val.bytes.len, out->val.bytes.data);

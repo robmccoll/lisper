@@ -5,8 +5,8 @@
 int
 main(int argc, char *argv[])
 {
-  char * list = "(\"this is a list :-)\"    \"second item\" (x\"414243\"))";
-  char * cur = list;
+  char * list = "(\"this is a list :-)\"    \"second item\" (x\"414243\" -0.5432 5 5.29e-29 5.29e29))";
+  const char * cur = list;
   int len = strlen(list);
   exp_t parsed;
   const char * err = parse_list(&parsed, &cur, &len);
