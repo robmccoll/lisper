@@ -119,7 +119,7 @@ parse_symbol(exp_t * out, const char ** in, int *len) {
 
   for( ;**in && *len; (*in)++, (*len)--) {
     char c = **in;
-    if(c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ')') {
+    if(c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ')' || c == '(') {
       --(*in);
       ++(*len);
       break;
@@ -127,6 +127,10 @@ parse_symbol(exp_t * out, const char ** in, int *len) {
     if(err = bytes_push_byte(out, c)) {
       return err;
     }
+  }
+
+  if(out->val.bytes.len == 0) {
+    return "no symbol found";
   }
   return NULL;
 }
@@ -333,6 +337,8 @@ parse_number(exp_t * out, const char ** in, int *len) {
         n = 0;
       } break;
       default: {
+        --(*in);
+        ++(*len);
         if(is_negative) {
           num *= -1;
         }
@@ -347,8 +353,6 @@ parse_number(exp_t * out, const char ** in, int *len) {
         eng += dec;
         out->val.f64 = (double)num;
         out->val.f64 *= pow((double)10.0, (double)eng);
-        --(*in);
-        ++(*len);
         return NULL;
       }
     }
