@@ -15,6 +15,20 @@ parse_list(exp_t * out, const char ** in, int *len) {
   out->val.vec.cap = 0;
   out->val.vec.len = 0;
 
+  exp_t symbol = {0};
+  if(err = parse_symbol(&symbol, in, len)) {
+    return err;
+  }
+
+  if(symbol.val.bytes.len == 1 && symbol.val.bytes.data[0] == '.') {
+    free_exp(&symbol);
+  } else {
+    out->type = EXP_CALL;
+    if(err = vec_push_copy(out, &symbol)) {
+      return err;
+    }
+  }
+
   for((*in)++, (*len)--;**in && *len; (*in)++, (*len)--) {
     char c = **in;
     switch(c) {
@@ -31,6 +45,8 @@ parse_list(exp_t * out, const char ** in, int *len) {
        } break;
       case ' ':
       case '\t':
+      case '\n':
+      case '\r':
         continue;
       case '"': {
         exp_t str = {0};
@@ -40,7 +56,7 @@ parse_list(exp_t * out, const char ** in, int *len) {
         if(err = vec_push_copy(out, &str)) {
           return err;
         }
-       } break;
+      } break;
       case 'x': {
         exp_t str = {0};
         if(err = parse_hex_string(&str, in, len)) {
@@ -49,7 +65,16 @@ parse_list(exp_t * out, const char ** in, int *len) {
         if(err = vec_push_copy(out, &str)) {
           return err;
         }
-       } break;
+      } break;
+      case '$': {
+        exp_t symbol = {0};
+        if(err = parse_symbol(&symbol, in, len)) {
+          return err;
+        }
+        if(err = vec_push_copy(out, &symbol)) {
+          return err;
+        }
+      } break;
       case '-':
       case '0':
       case '1':
@@ -68,12 +93,42 @@ parse_list(exp_t * out, const char ** in, int *len) {
         if(err = vec_push_copy(out, &str)) {
           return err;
         }
-       } break;
+      } break;
       default:
         return "Unexpected character when parsing start of list element.";
     }
   }
   return "Reached end of input without list being closed.";
+}
+
+const char *
+parse_symbol(exp_t * out, const char ** in, int *len) {
+  const char * err = NULL;
+
+  out->type = EXP_SYMBOL;
+  out->val.bytes.data = NULL;
+  out->val.bytes.cap = 0;
+  out->val.bytes.len = 0;
+
+  for((*in)++, (*len)--;**in && *len; (*in)++, (*len)--) {
+    char c = **in;
+    if(!(c == ' ' || c == '\t' || c == '\n' || c == '\r')) {
+      break;
+    }
+  }
+
+  for( ;**in && *len; (*in)++, (*len)--) {
+    char c = **in;
+    if(c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ')') {
+      --(*in);
+      ++(*len);
+      break;
+    }
+    if(err = bytes_push_byte(out, c)) {
+      return err;
+    }
+  }
+  return NULL;
 }
 
 const char *
@@ -292,6 +347,8 @@ parse_number(exp_t * out, const char ** in, int *len) {
         eng += dec;
         out->val.f64 = (double)num;
         out->val.f64 *= pow((double)10.0, (double)eng);
+        --(*in);
+        ++(*len);
         return NULL;
       }
     }
@@ -347,7 +404,10 @@ print_exp(exp_t * out, int indent) {
     case EXP_BYTES:
       printf("EXP_BYTES   %.*s\n", (int)out->val.bytes.len, out->val.bytes.data);
       break;
-    case EXP_VEC:
+    case EXP_SYMBOL:
+      printf("EXP_SYMBOL %.*s\n", (int)out->val.bytes.len, out->val.bytes.data);
+      break;
+    case EXP_VEC: {
       printf("EXP_VEC     (\n");
       for(int i = 0; i < out->val.vec.len; i++) {
         print_exp(&out->val.vec.children[i], indent+1);
@@ -356,6 +416,42 @@ print_exp(exp_t * out, int indent) {
         printf("  ");
       }
       printf(")\n");
+    } break;
+    case EXP_CALL: {
+      printf("EXP_CALL     (\n");
+      for(int i = 0; i < out->val.vec.len; i++) {
+        print_exp(&out->val.vec.children[i], indent+1);
+      }
+      for(int i = 0; i < indent; i++) {
+        printf("  ");
+      }
+      printf(")\n");
+    } break;
+  }
+  return NULL;
+}
+
+const char *
+free_exp(exp_t * out) {
+  switch(out->type) {
+    case EXP_INT64:
+    case EXP_FLOAT64:
+      break;
+    case EXP_BYTES:
+    case EXP_SYMBOL:
+      if(out->val.bytes.data) free(out->val.bytes.data);
+      out->val.bytes.data = NULL;
+      out->val.bytes.len = 0;
+      break;
+    case EXP_VEC:
+    case EXP_CALL:
+      for(int i = 0; i < out->val.vec.len; i++) {
+        free_exp(&out->val.vec.children[i]);
+      }
+      if(out->val.vec.children) free(out->val.vec.children);
+      out->val.vec.children = NULL;
+      out->val.vec.len = 0;
+      break;
     }
   return NULL;
 }
